@@ -1,0 +1,6 @@
+l:<num> // parametro que define a quantidade de linhas da matriz
+c:<num> // parametro que define a quantidade de colunas da matriz
+p:<num> // parametro que a probabilidade das celulas estarem vivas no inicio da matriz
+t:<num> // parametro que define a taxa de atualização da matriz na tela (em segundos)
+d:<num> // parametro que define se vão ser mostradas as informações das celulas abaixo da matriz (0 ou 1)
+i:<num> // parametro para indicar a quantidade de iterações que o programa vai fazer na matriz;

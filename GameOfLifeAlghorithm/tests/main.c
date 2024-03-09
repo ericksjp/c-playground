@@ -17,7 +17,7 @@
 */
 #include <assert.h>
 #include <stdio.h>
-#include "./src/vida.h"
+#include "../src/vida.h"
 
 #define MATRIZ_SIZE 3
 
