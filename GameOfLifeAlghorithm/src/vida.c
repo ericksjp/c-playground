@@ -20,7 +20,7 @@ Parameters inicializaParameters(Parameters p){
   p.matrizColumns = 50;
   p.matrizLines = 25;
   p.lifeProbInInicialization = 50;
-  p.taxaAtualizacaoSegundos = 2;
+  p.taxaAtualizacaoSegundos = 1.0;
   p.iteracoes = 100;
   p.showInfo = 1;
 
@@ -36,7 +36,6 @@ void iniciateMatrix(int *matriz, int lines, int columns, int testParameter){
             } else {
                 *(matriz + i * columns + j) = 0;
             }
-            // *(matriz + i * matrizSize + j) = rand() % 2;
         }
     }
 }
@@ -55,43 +54,36 @@ void printMatrix(int *matriz, int lines, int columns){
     }
 }
 
+void printMatrixWithBlocks(int *matriz, int lines, int columns){
+    for (int i = 0; i < lines; i++) {
+        for (int j = 0; j < columns; j++) {
+            if (*(matriz + i * columns + j) == 1) {
+                printf("\u2593");
+            } else {
+                printf("\u2591");
+            }
+        }
+        printf("\n");
+    }
+}
+
 int countNeighbor(int *matriz, int line, int column, int matrizLines, int matrizColumns) {
     int acc = 0;
-
-    // Verifica em cima e em baixo
-    if (line + 1 < matrizLines) {
-        acc += *(matriz + (line + 1) * matrizColumns + column);
+    for (int i = -1; i <= 1; i++){
+      for (int j = -1; j <=1; j++){
+        if (line + i >= 0 && line + i < matrizLines && column + j >= 0 && column + j < matrizColumns && !(i == 0 && j == 0))
+            acc+=*(matriz + (line + i) * matrizColumns + (column + j));
+      }
     }
-    if (line - 1 >= 0) {
-        acc += *(matriz + (line - 1) * matrizColumns + column);
-    }
-
-    // Verifica esquerda e direita
-    if (column + 1 < matrizColumns) {
-        acc += *(matriz + line * matrizColumns + (column + 1));
-    }
-    if (column - 1 >= 0) {
-        acc += *(matriz + line * matrizColumns + (column - 1));
-    }
-
-    // Verifica nas diagonais
-    if (line + 1 < matrizLines && column + 1 < matrizColumns) {
-        acc += *(matriz + (line + 1) * matrizColumns + (column + 1));
-    }
-    if (line - 1 >= 0 && column + 1 < matrizColumns) {
-        acc += *(matriz + (line - 1) * matrizColumns + (column + 1));
-    }
-    if (line + 1 < matrizLines && column - 1 >= 0) {
-        acc += *(matriz + (line + 1) * matrizColumns + (column - 1));
-    }
-    if (line - 1 >= 0 && column - 1 >= 0) {
-        acc += *(matriz + (line - 1) * matrizColumns + (column - 1));
-    }
-
     return acc;
 }
 
-int willSurvive(int neighbors){
+
+int updateState(int cellState, int neighbors){
+  if (cellState == 0){
+    return neighbors == 3 ? 1 : 0;
+  }
+
   if (neighbors < 2)
     return 0;
   if (neighbors > 3)
@@ -100,13 +92,28 @@ int willSurvive(int neighbors){
 }
 
 void scanCells(int *matriz, int lines, int columns){
-    for (int i = 0; i < lines; i++){
-      for (int j = 0; j < columns; j++){
-        int neighbors = countNeighbor(matriz, i, j, lines, columns);
-        if (willSurvive(neighbors) != *(matriz + i * columns + j)){
-          *(matriz + i * columns + j) = willSurvive(neighbors);
-        }
+  int novaGeracao[lines][columns];
+  transferirMatriz(&novaGeracao[0][0], (matriz + 0 * columns + 0), lines, columns);
+
+  for (int i = 0; i < lines; i++){
+    for (int j = 0; j < columns; j++){
+      int cell = *(matriz + i * columns + j);
+      int neighbors = countNeighbor(matriz, i, j, lines, columns);
+      // printf("Cell [%d/%d]\nEstado: %d\nVizinhos: %d\nNovo estado: %d\n\n", i, j, cell, neighbors, updateState(cell, neighbors));
+      if (updateState(cell, neighbors) != *(matriz + i * columns + j)){
+        novaGeracao[i][j] = updateState(cell, neighbors);
       }
+    }
+  }
+
+  transferirMatriz((matriz + 0 * columns + 0),&novaGeracao[0][0], lines, columns);
+}
+
+void transferirMatriz(int *matriz, int *matrizAux, int lines, int columns){
+  for (int i = 0; i < lines; i++){
+    for (int j = 0; j < columns; j++){
+      *(matriz + i * columns + j) = *(matrizAux + i * columns + j);
+    }
   }
 }
 
@@ -138,7 +145,7 @@ void showLife(Parameters p){
       showInfo(c, liveCells, deadCells);
     }
     scanCells(&matriz[0][0], p.matrizLines, p.matrizColumns);
-    usleep(p.taxaAtualizacaoSegundos * 1000000);
+    usleep((int)(p.taxaAtualizacaoSegundos * 1000000));
     cleanScreen();
   }
 }

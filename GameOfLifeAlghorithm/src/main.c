@@ -24,13 +24,13 @@
 Parameters setParameters(int argc, char *argv[], Parameters p);
 
 int main(int argc, char *argv[]) {
+  int matriz[151][318];
   Parameters p = setParameters(argc, argv, p);
   cleanScreen();
   showLife(p);
 }
 
-
-int validateParameter(char str[], int size){
+void validateParameter(char str[], int size){
   if (size < 3){
     printf("Invalid parameter: %s\n", str);
     exit(1);
@@ -44,6 +44,31 @@ int validateParameter(char str[], int size){
   }
 }
 
+
+void verifyDouble(char str[], int size){
+  if (size < 3){
+    printf("Invalid parameter: %s\n", str);
+    exit(1);
+  }
+  
+  int dotCount = 0;
+  for (int c = 2; c < size; c++){
+    if ((int)str[c] == 46){
+      dotCount++;
+    }
+    if (dotCount > 1){
+      printf("Invalid parameter: %s\n", str);
+      exit(1);
+    }
+    if ((int)str[c] < 48 || (int)str[c] > 57){
+      if ((int)str[c] != 46){
+        printf("Invalid parameter: %s\n", str);
+        exit(1);
+      }
+    }
+  }
+}
+
 int toNumber(char str[], int size) {
   char *ptr = str + 2;
   int number;
@@ -51,6 +76,14 @@ int toNumber(char str[], int size) {
   number = strtol(ptr, NULL, 10);
 
   return number;
+}
+
+float toFloat(char str[], int size) {
+  char *ptr = str + 2;
+  float floatValue;
+  floatValue = atof(ptr);
+
+  return floatValue;
 }
 
 Parameters setParameters(int argc, char *argv[], Parameters p){
@@ -73,8 +106,8 @@ Parameters setParameters(int argc, char *argv[], Parameters p){
           p.lifeProbInInicialization = toNumber(argv[i], strlen(argv[i]));
           break;
         case 't':
-          validateParameter(argv[i], strlen(argv[i]));
-          p.taxaAtualizacaoSegundos = toNumber(argv[i], strlen(argv[i]));
+          verifyDouble(argv[i], strlen(argv[i]));
+          p.taxaAtualizacaoSegundos = toFloat(argv[i], strlen(argv[i]));
           break;
         case 'd':
           validateParameter(argv[i], strlen(argv[i]));
