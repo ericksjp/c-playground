@@ -1,73 +1,91 @@
+#include <pthread.h>
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 
-// use essa flag na hora de compilar o codigo com o gcc (-pthread)
-// ~$ gcc -pthread jantarFilosofos.c -o jantarFilosofos
+typedef enum {
+  PENSANDO = 0,
+  COMENDO = 1,
+} acao;
 
-pthread_t *philosophers;
-pthread_mutex_t *forks;
+pthread_t *filosofos;
+pthread_mutex_t *garfos;
 
-int size = 5;
+void agir(int i, acao a) {
+  const char *str = a == PENSANDO ? "pensando" : "comendo";
+  printf("Filosofo %d esta %s!\n", i + 1, str);
 
-
-void eat(int i){
-
-	printf("Filosofo %d esta comendo\n",i+1);
-
-	sleep(1 + rand()%10);
+  // gerando um tempo aleatorio para acao do filosofo
+  sleep(1 + rand() % 10);
 }
 
-void* philosopher(void* args){
-	int i = 0,first,second;
-	while(!pthread_equal(*(philosophers+i),pthread_self()) && i < size){
-		i++;
-	}
+void *filosofo(void *arg) {
+  int size = *(int *)arg;
+  int i = 0, garfoE, garfoD;
 
-	while(1){
+  // identificando a posicao do filosofo
+  while (pthread_equal(*(filosofos + i), pthread_self()) != 1 && i < size) {
+    i++;
+  }
 
-		printf("Filosofo %d esta pensando\n",i+1);
+  while (1) {
+    // botando o filosofo pra pensar
+    agir(i, PENSANDO);
 
-		sleep(1 + rand()%10);
-		
-		first = i;
-		second = (i+1)%size;
+    // calculando a posicao dos garfos
+    garfoE = (i + 1) % size;
+    garfoD = i;
 
-		pthread_mutex_lock(forks + (first>second?second:first));
-		pthread_mutex_lock(forks + (first<second?second:first));
-		eat(i);
-		pthread_mutex_unlock(forks+first);
-		pthread_mutex_unlock(forks+second);
-	}
+    // travando os garfos
+    pthread_mutex_lock(garfos + (garfoE > garfoD ? garfoE : garfoD));
+    pthread_mutex_lock(garfos + (garfoE < garfoD ? garfoE : garfoD));
 
-	return NULL;
+    // botando o filosofo pra comer
+    agir(i, COMENDO);
+
+    // liberando os garfos
+    pthread_mutex_unlock(garfos + garfoE);
+    pthread_mutex_unlock(garfos + garfoD);
+  }
+
+  return NULL;
 }
 
+int main() {
 
-int main(void){
-	int i,err;
-	srand(time(NULL));
-	philosophers = (pthread_t*) malloc(size*sizeof(pthread_t));
-	forks = (pthread_mutex_t*) malloc(size*sizeof(pthread_mutex_t));
+  int quantidade, i;
+  printf("Informe o numero de filosofos na mesa: ");
+  scanf("%d", &quantidade);
 
-	for(i=0;i<size;++i)
-		if(pthread_mutex_init(forks+i,NULL) != 0){
-			printf("deu ruiam ao inicializar o fork %d :(\n",i+1);
-			return 1;
-		}
+  // alocando espaço
+  filosofos = (pthread_t *)malloc(quantidade * sizeof(pthread_t));
+  garfos = (pthread_mutex_t *)malloc(quantidade * sizeof(pthread_mutex_t));
 
-	for(i=0;i<size;++i){
-		pthread_create(philosophers+i,NULL,&philosopher,NULL);
-	}
+  // iniciando os garfos com exlução mutua
+  for (i = 0; i < quantidade; i++) {
+    pthread_mutex_init(&garfos[i], NULL);
+  }
 
-	for(i=0;i<size;++i)
-		pthread_join(*(philosophers+i),NULL);
+  // criando as threads
+  for (i = 0; i < quantidade; i++) {
+    pthread_create(&filosofos[i], NULL, filosofo, &quantidade);
+  }
 
-	free(philosophers);
-	free(forks);
+  // destruindo threads
+  for (int i = 0; i < quantidade; i++) {
+    pthread_join(filosofos[i], NULL);
+  }
 
-	return 0;
+  // destruindo garfos
+  for (int i = 0; i < quantidade; i++) {
+    pthread_mutex_destroy(&garfos[i]);
+  }
+
+  // desalocando espaço
+  free(filosofos);
+  free(garfos);
+
+  return 0;
 }
