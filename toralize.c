@@ -1,122 +1,94 @@
 #include "toralize.h"
 
-int main(int argc, char* argv[])
+static struct sockaddr_in getSocketAddr()
 {
-    char *endptr, *host;
-    int port, s;
-    struct sockaddr_in sock;
-    Req* req;
-    char buf[ressize];
-    Res* res;
-    const int tmpLen = 512;
-    char tmp[tmpLen];
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(PROXYPORT);
+    addr.sin_addr.s_addr = inet_addr(PROXY);
+    return addr;
+}
 
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s  <host> <port>\n", argv[0]);
-        exit(EXIT_FAILURE);
-    }
+static int connectToProxy(const struct sockaddr_in* proxy_addr)
+{
+    int socket_fd;
+    int (*original_connect)(int, const struct sockaddr*, socklen_t);
 
-    host = argv[1];
-    port = parsePort(argv[2]);
-
-    // try to create a socket using tcp
-    s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
+    // find the address of the next connect function, skipping this one to prevent infinite recursion
+    original_connect = dlsym(RTLD_NEXT, "connect");
+    // try to create a socket fd using tcp
+    socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (socket_fd < 0) {
         perror("socket");
         exit(EXIT_FAILURE);
     }
 
-    // describe socket adress
-    sock.sin_family = AF_INET;
-    sock.sin_port = htons(PROXYPORT);
-    sock.sin_addr.s_addr = inet_addr(PROXY);
-
     // try to open connection (upcast internet to generic socket)
-    if (connect(s, (struct sockaddr*)&sock, sizeof(sock)) != 0) {
-        perror("connect");
+    if (original_connect(socket_fd, (struct sockaddr*)proxy_addr, sizeof(*proxy_addr)) != 0) {
+        int err = errno;
+        fprintf(stderr, "connect -> errno=%d: %s\n", err, strerror(err));
         exit(EXIT_FAILURE);
     };
 
-    printf("Connected to proxy\n");
+    return socket_fd;
+}
 
-    // try to send a connection request to the proxy server
-    req = request(host, port);
-    write(s, req, reqsize);
+static void sendConnectionRequestThroughProxy(
+    const int socket_fd,
+    const struct sockaddr_in* remote_addr)
+{
+    Req* req;
+    Res* res;
+    char buf[ressize];
+    int success;
+
+    // send request
+    req = request(remote_addr);
+    write(socket_fd, req, reqsize);
+
+    // read response
     memset(buf, 0, ressize);
-    if (read(s, buf, ressize) < 1) {
+    success = read(socket_fd, buf, ressize);
+    if (success < 1) {
         perror("read");
         free(req);
-        close(s);
+        close(socket_fd);
         exit(EXIT_FAILURE);
     };
-
     res = (Res*)buf;
-
-    // if proxy response with error
-    if (res->cd != 90){
+    if (res->cd != 90) {
         fprintf(stderr, "Unable to traverse the proxy, error code: %d\n", res->cd);
         free(req);
-        close(s);
+        close(socket_fd);
         exit(EXIT_FAILURE);
     }
 
-    printf("Successfully connected through the proxy to %s:%d\n", host, port);
-
-    // sending a head request through proxy
-    memset(tmp, 0, tmpLen);
-    snprintf(tmp, tmpLen - 1,
-             "HEAD / HTTP/1.0\r\n"
-             "Host: %s\r\n"
-             "\r\n", host);
-    write(s, tmp, strlen(tmp));
-    memset(tmp, 0, tmpLen);
-
-    // reading response
-    read(s, tmp, tmpLen - 1);
-    printf("'%s'\n", tmp);
-
-    close(s);
     free(req);
-    return 0;
 }
 
-Req* request(const char* dstip, const int dstport)
+Req *request(const struct sockaddr_in* sock)
 {
     Req* req = malloc(reqsize);
     req->vn = 4;
     req->cd = 1;
-    req->dstport = htons(dstport);
-    req->dstip = inet_addr(dstip);
+    req->dstport = sock->sin_port;
+    req->dstip = sock->sin_addr.s_addr;
     strncpy(req->userid, USERNAME, 8);
 
     return req;
 }
 
-static int parsePort(char* str)
+int connect(int fd, const struct sockaddr* remote_addr, socklen_t addrlen)
 {
-    char* endptr;
-    errno = 0;
-    long long port = strtoll(str, &endptr, 10);
+    int socket_fd;
 
-    if (errno == ERANGE) {
-        perror("strtoll");
-        exit(EXIT_FAILURE);
-    }
+    const struct sockaddr_in proxy_addr = getSocketAddr();
+    const struct sockaddr_in* remote_addr_in = (struct sockaddr_in*)remote_addr;
 
-    if (*endptr != '\0') {
-        fprintf(stderr, "Invalid characters in port: %s\n", endptr);
-        exit(EXIT_FAILURE);
-    }
+    socket_fd = connectToProxy(&proxy_addr);
+    sendConnectionRequestThroughProxy(socket_fd, remote_addr_in);
 
-    if (endptr == str) {
-        fprintf(stderr, "No digits were found");
-        exit(EXIT_FAILURE);
-    }
+    dup2(socket_fd, fd);
 
-    if (port > 65535 || port < 0) {
-        fprintf(stderr, "Error: Invalid port number. Please provide a port number " "in the range 1-65535.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    return (int)port;
+    return 0;
 }
